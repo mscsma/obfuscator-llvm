@@ -2,10 +2,12 @@
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Passes/PassBuilder.h"
+#include "DataScrambling.h"
 #include "Substitution.h"
 #include "Flattening.h"
 #include "SplitBasicBlocks.h"
 #include "BogusControlFlow.h"
+#include "DataScrambling.h"
 
 using namespace llvm;
 
@@ -20,15 +22,31 @@ static void loadPass(const PassManagerBuilder &Builder, legacy::PassManagerBase 
       exit(1);
     }
   }
+
   PM.add(createSplitBasicBlock());
   PM.add(createBogus());
   PM.add(createFlattening());
   PM.add(createSubstitution());
+
+}
+
+static void loadDataScrambling(const PassManagerBuilder &Builder, legacy::PassManagerBase &PM) {
+  // Initialization of the global cryptographically
+  // secure pseudo-random generator
+  if(!AesSeed.empty()) {
+    if(!llvm::cryptoutils->prng_seed(AesSeed.c_str())) {
+      exit(1);
+    }
+  }
+  
+  PM.add(createDataScrambling());
 }
 
 // These constructors add our pass to a list of global extensions.
 static RegisterStandardPasses clangtoolLoader_Ox(PassManagerBuilder::EP_OptimizerLast, loadPass);
 static RegisterStandardPasses clangtoolLoader_O0(PassManagerBuilder::EP_EnabledOnOptLevel0, loadPass);
+static RegisterStandardPasses clangtoolLoader_Ox2(PassManagerBuilder::EP_OptimizerLast, loadDataScrambling);
+static RegisterStandardPasses clangtoolLoader_O02(PassManagerBuilder::EP_EnabledOnOptLevel0, loadDataScrambling);
 // Note: The location EP_OptimizerLast places this pass at the end of the list
 // of *optimizations*. That means on -O0, it does not get run.
 //
@@ -40,7 +58,16 @@ static RegisterStandardPasses clangtoolLoader_O0(PassManagerBuilder::EP_EnabledO
 
 PassPluginLibraryInfo getObfuscatorLLVMPluginInfo(){
   return {LLVM_PLUGIN_API_VERSION, "ObfuscatorLLVM", LLVM_VERSION_STRING, [](PassBuilder &PB){
-    PB.registerVectorizerStartEPCallback([](FunctionPassManager &PM, PassBuilder::OptimizationLevel level){
+    PB.registerPipelineStartEPCallback([](ModulePassManager &MPM, OptimizationLevel level){
+      if(!AesSeed.empty()) {
+        if(!llvm::cryptoutils->prng_seed(AesSeed.c_str())) {
+          exit(1);
+        }
+      }
+      MPM.addPass(DataScramblingPass());
+    });
+
+    PB.registerVectorizerStartEPCallback([](FunctionPassManager &PM, OptimizationLevel level){
       if(!AesSeed.empty()) {
         if(!llvm::cryptoutils->prng_seed(AesSeed.c_str())) {
           exit(1);

@@ -212,7 +212,11 @@ bool Flattening::flatten(Function *f) {
     }
 
     // If it's a conditional jump
-    if (i->getTerminator()->getNumSuccessors() == 2) {
+    // FIX: there are other instructions (eg. switch) that can have 2
+    //  successors. The code later assumes a BranchInst, but that's incorrect.
+    //  Hence we insert a check here for Instruction::Br.
+    if (i->getTerminator()->getNumSuccessors() == 2
+        && i->getTerminator()->getOpcode() == Instruction::Br) {
       // Get next cases
       ConstantInt *numCaseTrue =
           switchI->findCaseDest(i->getTerminator()->getSuccessor(0));

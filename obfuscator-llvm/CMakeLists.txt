@@ -9,6 +9,7 @@ if (LLVM_ENABLE_NEW_PASS_MANAGER)
         SplitBasicBlocks.cpp
         Flattening.cpp
         Utils.cpp
+        DataScrambling.cpp
     )
     target_link_libraries(ObfuscatorLLVM
         PUBLIC
@@ -27,6 +28,7 @@ else()
         SplitBasicBlocks.cpp
         Flattening.cpp
         Utils.cpp
+        DataScrambling.cpp
         PLUGIN_TOOL
         opt
     )

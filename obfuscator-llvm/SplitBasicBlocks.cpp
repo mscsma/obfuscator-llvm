@@ -22,11 +22,20 @@ using namespace llvm;
 // Stats
 STATISTIC(Split, "Basicblock splitted");
 
+const int defaultObfRate = 30, defaultObfTime = 2;
+
 static cl::opt<bool> SplitFlag("split", cl::init(false),
                            cl::desc("Enable basic block splitting"));
 
-static cl::opt<int> SplitNum("split_num", cl::init(2),
+static cl::opt<int> SplitNum("split_num", cl::init(defaultObfTime),
                              cl::desc("Split <split_num> time each BB"));
+
+static cl::opt<int>
+    ObfProbRate("split_prob",
+                cl::desc("Choose the probability [%] each basic blocks will be "
+                         "split by the -split pass"),
+                cl::value_desc("probability rate"), cl::init(defaultObfRate),
+                cl::Optional);
 
 namespace {
 struct SplitBasicBlock : public FunctionPass {
@@ -52,6 +61,7 @@ Pass *llvm::createSplitBasicBlock() {
 PreservedAnalyses SplitBasicBlockPass::run(Function &F, FunctionAnalysisManager &AM){
   SplitBasicBlock split;
   split.runOnFunction(F);
+  errs() << "asdfadsfdsamfdsadaks";
   return PreservedAnalyses::none();
 }
 
@@ -59,15 +69,28 @@ bool SplitBasicBlock::runOnFunction(Function &F) {
   Function *tmp = &F;
 
   // Check if the number of applications is correct
+  auto probs = readAnnotate(&F, ObfProbRate.ArgStr);
+  if (!probs.empty()) {
+    int value = ObfProbRate;
+    if (!probs.getAsInteger(0, value))
+      ObfProbRate.setValue(value);
+  }
   auto nums = readAnnotate(tmp, SplitNum.ArgStr);
   if (!nums.empty()) {
     int value = SplitNum;
     if (!nums.getAsInteger(0, value))
       SplitNum.setValue(value);
   }
-  if (!((SplitNum > 1) && (SplitNum <= 10))) {
+  if (!((SplitNum >= 1) && (SplitNum <= 10))) {
     errs() << "Split application basic block percentage\
             -split_num=x must be 1 < x <= 10";
+    return false;
+  }
+
+  // Check if the number of applications is correct
+  if (!((ObfProbRate > 0) && (ObfProbRate <= 100))) {
+    errs() << "Split application basic blocks percentage "
+              "-split_prob=x must be 0 < x <= 100";
     return false;
   }
 
@@ -92,6 +115,11 @@ void SplitBasicBlock::split(Function *f) {
   for (std::vector<BasicBlock *>::iterator I = origBB.begin(),
                                            IE = origBB.end();
        I != IE; ++I) {
+    
+    if((int)llvm::cryptoutils->get_range(100) > ObfProbRate) {
+      continue;
+    }
+    
     BasicBlock *curr = *I;
 
     // No need to split a 1 inst bb

@@ -27,13 +27,22 @@ using namespace llvm;
 #define NUMBER_OR_SUBST 2
 #define NUMBER_XOR_SUBST 2
 
+const int defaultObfRate = 30, defaultObfTime = 1;
+
 static cl::opt<bool> SubstitutionFlag("sub", cl::init(false),
                                   cl::desc("Enable instruction substitutions"));
 
 static cl::opt<int>
     ObfTimes("sub_loop",
              cl::desc("Choose how many time the -sub pass loops on a function"),
-             cl::value_desc("number of times"), cl::init(1), cl::Optional);
+             cl::value_desc("number of times"), cl::init(defaultObfTime), cl::Optional);
+
+static cl::opt<int>
+    ObfProbRate("sub_prob",
+                cl::desc("Choose the probability [%] each instructions will be "
+                         "obfuscated by the -sub pass"),
+                cl::value_desc("probability rate"), cl::init(defaultObfRate),
+                cl::Optional);
 
 // Stats
 STATISTIC(Add, "Add substitued");
@@ -105,8 +114,15 @@ Pass *llvm::createSubstitution() { return new Substitution(); }
 
 bool Substitution::runOnFunction(Function &F) {
   Function *tmp = &F;
+  
 
   // Check if the percentage is correct
+  auto probs = readAnnotate(&F, ObfProbRate.ArgStr);
+  if (!probs.empty()) {
+    int value = ObfProbRate;
+    if (!probs.getAsInteger(0, value))
+      ObfProbRate.setValue(value);
+  }
   auto loops = readAnnotate(tmp, ObfTimes.ArgStr);
   if (!loops.empty()) {
     int value = ObfTimes;
@@ -115,6 +131,12 @@ bool Substitution::runOnFunction(Function &F) {
   }
   if (ObfTimes <= 0) {
     errs() << "Substitution application number -sub_loop=x must be x > 0";
+    return false;
+  }
+   // Check if the number of applications is correct
+  if (!((ObfProbRate > 0) && (ObfProbRate <= 100))) {
+    errs() << "Substitution application instructions percentage "
+              "-sub_prob=x must be 0 < x <= 100";
     return false;
   }
 
@@ -142,7 +164,7 @@ bool Substitution::substitute(Function *f) {
   do {
     for (Function::iterator bb = tmp->begin(); bb != tmp->end(); ++bb) {
       for (BasicBlock::iterator inst = bb->begin(); inst != bb->end(); ++inst) {
-        if (inst->isBinaryOp()) {
+        if (inst->isBinaryOp() && (int)llvm::cryptoutils->get_range(100) <= ObfProbRate) {
           switch (inst->getOpcode()) {
           case BinaryOperator::Add:
             // case BinaryOperator::FAdd:
